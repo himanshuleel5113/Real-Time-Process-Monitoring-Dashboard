@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc, Input, Output, State, callback_context, ALL  # Added ALL here
+from dash import Dash, html, dcc, Input, Output, State
 import plotly.express as px
 import psutil
 from collections import deque
@@ -7,22 +7,18 @@ from threading import Thread
 
 app = Dash(__name__)
 
-# Initialize data structures
 cpu_data = deque(maxlen=50)
 memory_data = deque(maxlen=50)
 timestamps = deque(maxlen=50)
 
-# Layout of the dashboard
 app.layout = html.Div([
-    html.H1("Real-Time System Monitoring Dashboard"),
+    html.H1("Real-Time Process Monitoring Dashboard"),
     dcc.Graph(id='cpu-usage-graph'),
     dcc.Graph(id='memory-usage-graph'),
-    html.H3("Running Processes"),
-    html.Div(id='process-table'),
+    html.Table(id='process-table'),
     dcc.Interval(id='interval-component', interval=2000, n_intervals=0)
 ])
 
-# Function to update CPU and memory data
 def update_data():
     while True:
         cpu_usage = psutil.cpu_percent(interval=1)
@@ -32,10 +28,8 @@ def update_data():
         memory_data.append(memory_usage)
         time.sleep(2)
 
-# Start the data update thread
 Thread(target=update_data, daemon=True).start()
 
-# Callback to update the graphs and process table
 @app.callback(
     [Output('cpu-usage-graph', 'figure'),
      Output('memory-usage-graph', 'figure'),
@@ -43,11 +37,9 @@ Thread(target=update_data, daemon=True).start()
     [Input('interval-component', 'n_intervals')]
 )
 def update_dashboard(n):
-    # Update CPU and Memory graphs
-    cpu_fig = px.line(x=list(timestamps), y=list(cpu_data), labels={'x': 'Time', 'y': 'CPU Usage (%)'}, title="CPU Usage Over Time")
-    memory_fig = px.line(x=list(timestamps), y=list(memory_data), labels={'x': 'Time', 'y': 'Memory Usage (%)'}, title="Memory Usage Over Time")
+    cpu_fig = px.line(x=list(timestamps), y=list(cpu_data), labels={'x': 'Time', 'y': 'CPU Usage (%)'})
+    memory_fig = px.line(x=list(timestamps), y=list(memory_data), labels={'x': 'Time', 'y': 'Memory Usage (%)'})
     
-    # Update process table
     processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
         processes.append(html.Tr([
@@ -55,7 +47,7 @@ def update_dashboard(n):
             html.Td(proc.info['name']),
             html.Td(f"{proc.info['cpu_percent']:.2f}%"),
             html.Td(f"{proc.info['memory_percent']:.2f}%"),
-            html.Td(html.Button('Kill', id={'type': 'kill-btn', 'index': proc.info['pid']}, n_clicks=0))
+            html.Td(html.Button('Kill', id=f"kill-{proc.info['pid']}", n_clicks=0))
         ]))
     
     process_table = html.Table([
@@ -65,28 +57,22 @@ def update_dashboard(n):
     
     return cpu_fig, memory_fig, process_table
 
-# Callback to handle kill button clicks
 @app.callback(
     Output('process-table', 'children', allow_duplicate=True),
-    Input({'type': 'kill-btn', 'index': ALL}, 'n_clicks'),  # Fixed: Replaced dash.ALL with ALL
+    [Input(f"kill-{proc.info['pid']}", 'n_clicks') for proc in psutil.process_iter(['pid'])],
     prevent_initial_call=True
 )
-def kill_process(n_clicks):
-    ctx = callback_context
+def kill_process(*args):
+    ctx = dash.callback_context
     if not ctx.triggered:
         return dash.no_update
-    
-    # Get the PID from the button ID
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    pid = int(button_id.split(':')[-1].strip('}"'))
-    
+    pid = int(button_id.split('-')[1])
     try:
-        # Kill the process
         psutil.Process(pid).terminate()
     except psutil.NoSuchProcess:
         pass
     
-    # Return the updated process table
     processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
         processes.append(html.Tr([
@@ -94,7 +80,7 @@ def kill_process(n_clicks):
             html.Td(proc.info['name']),
             html.Td(f"{proc.info['cpu_percent']:.2f}%"),
             html.Td(f"{proc.info['memory_percent']:.2f}%"),
-            html.Td(html.Button('Kill', id={'type': 'kill-btn', 'index': proc.info['pid']}, n_clicks=0))
+            html.Td(html.Button('Kill', id=f"kill-{proc.info['pid']}", n_clicks=0))
         ]))
     
     return html.Table([
