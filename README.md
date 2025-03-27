@@ -1,4 +1,4 @@
-Real Time Process Monitoring Dashboard
+#Real Time Process Monitoring Dashboard
 A real-time process monitoring tool for Windows that provides detailed CPU and memory usage tracking for all running processes.
 
 Features
